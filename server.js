@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Database setup
-const db = new sqlite3.Database(path.join(__dirname, 'survey.db'));
+const db = new sqlite3.Database('survey.db');
 
 // Create tables with all the new question fields
 db.serialize(() => {
@@ -75,37 +75,6 @@ db.serialize(() => {
     });
     
 
-
-    // Tables for the Southern Öland tourism survey (English/Swedish)
-    db.run(`CREATE TABLE IF NOT EXISTS oland_surveys (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        language TEXT,
-        consent INTEGER,
-        age TEXT,
-        sex TEXT,
-        education TEXT,
-        residence TEXT,
-        stay_length TEXT,
-        zip_code TEXT,
-        tourism_work TEXT,
-        job_categories TEXT,            -- JSON array
-        responses TEXT,                 -- JSON object (Likert answers)
-        attraction_pins TEXT,           -- JSON array of pins
-        user_agent TEXT,
-        ip TEXT
-    )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS oland_attraction_pins (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        survey_id INTEGER,
-        latitude REAL,
-        longitude REAL,
-        category TEXT,
-        name TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (survey_id) REFERENCES oland_surveys (id)
-    )`);
 });
 
 // Routes
@@ -397,96 +366,8 @@ app.get('/download-csv', (req, res) => {
     });
 });
 
-function submitSurveyHandler(req, res) {
+app.post('/submit-survey', (req, res) => {
     const data = req.body;
-
-    // Detect Southern Öland tourism survey payload (new questionnaire)
-    // The new front-end sends JSON with keys like: consent, language, responses (object), attraction_pins (array)
-    const looksLikeOlandSurvey =
-        (data && (data.responses || data.attraction_pins)) ||
-        (data && Object.keys(data).some(k => k.startsWith('q1_') || k.startsWith('q2_'))) ||
-        (data && Object.keys(data).some(k => ['age','sex','education','residence','stay_length','tourism_work'].includes(k)));
-
-    if (looksLikeOlandSurvey) {
-        try {
-            const parseMaybeJson = (v, fallback) => {
-                if (v == null) return fallback;
-                if (typeof v === 'object') return v;
-                if (typeof v === 'string' && v.trim().length) {
-                    try { return JSON.parse(v); } catch { return fallback; }
-                }
-                return fallback;
-            };
-
-            const responsesObj = parseMaybeJson(data.responses, {});
-            const pinsArr = parseMaybeJson(data.attraction_pins, []);
-
-            const jobCats = parseMaybeJson(data.tourism_job_categories || data.job_categories, []);
-            const jobCatsJson = JSON.stringify(jobCats || []);
-
-            const responsesJson = JSON.stringify(responsesObj || {});
-            const pinsJson = JSON.stringify(pinsArr || []);
-
-            const insert = `INSERT INTO oland_surveys (
-                language, consent,
-                age, sex, education, residence, stay_length, zip_code, tourism_work,
-                job_categories, responses, attraction_pins,
-                user_agent, ip
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-            const values = [
-                data.language || 'en',
-                data.consent ? 1 : 0,
-                data.age || null,
-                data.sex || null,
-                data.education || null,
-                data.residence || null,
-                data.stay_length || null,
-                data.zip_code || null,
-                data.tourism_work || null,
-                jobCatsJson,
-                responsesJson,
-                pinsJson,
-                req.get('user-agent') || null,
-                req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null
-            ];
-
-            db.run(insert, values, function (err) {
-                if (err) {
-                    console.error('Error inserting oland survey:', err);
-                    return res.status(500).json({ success: false, error: 'db_insert_failed' });
-                }
-
-                const surveyId = this.lastID;
-
-                // Store pins in normalized table (optional, but useful)
-                if (Array.isArray(pinsArr) && pinsArr.length) {
-                    const stmt = db.prepare(`INSERT INTO oland_attraction_pins (survey_id, latitude, longitude, category, name) VALUES (?, ?, ?, ?, ?)`);
-                    for (const p of pinsArr) {
-                        const lat = Number(p.lat ?? p.latitude);
-                        const lng = Number(p.lng ?? p.longitude);
-                        stmt.run([
-                            surveyId,
-                            Number.isFinite(lat) ? lat : null,
-                            Number.isFinite(lng) ? lng : null,
-                            p.category || null,
-                            p.name || null
-                        ]);
-                    }
-                    stmt.finalize();
-                }
-
-                return res.json({ success: true, survey_id: surveyId, survey_type: 'oland' });
-            });
-
-            return;
-        } catch (e) {
-            console.error('Oland survey handler error:', e);
-            return res.status(400).json({ success: false, error: 'invalid_payload' });
-        }
-    }
-
-
     console.log('Received survey data:', data);
     
     // Parse and format map data before insertion
@@ -705,11 +586,7 @@ function submitSurveyHandler(req, res) {
             surveyId: surveyId
         });
     });
-}
-
-app.post('/submit-survey', submitSurveyHandler);
-app.post('/submit', submitSurveyHandler);
-
+});
 
 // DELETE route for individual survey entries
 app.delete('/delete-survey/:id', (req, res) => {
