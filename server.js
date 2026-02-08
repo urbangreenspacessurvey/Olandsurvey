@@ -197,6 +197,43 @@ app.get('/database', async (req, res) => {
   th{ position:sticky; top:0; background:var(--g); color:#fff; text-align:left; padding:10px; font-size:13px; white-space:nowrap; }
   td{ padding:10px; border-top:1px solid #e5e7eb; vertical-align:top; font-size:13px; white-space:nowrap; }
   td:nth-last-child(2), td:nth-last-child(3){ white-space:normal; max-width:520px; }
+
+/* ==== FIX: wrap long JSON in database table (attraction_pins) ==== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 10px;
+  vertical-align: top;
+  text-align: left;
+}
+
+th {
+  background: #1f6f3a;
+  color: white;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* Allow long JSON (pins) to wrap */
+td {
+  white-space: normal !important;
+  word-break: break-word;
+  max-width: 600px;
+}
+
+td.attraction-pins,
+td.pins,
+td:last-child {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 13px;
+}
+
 </style>
 </head>
 <body>
