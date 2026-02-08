@@ -71,11 +71,115 @@ db.serialize(() => {
     db.run(`ALTER TABLE surveys ADD COLUMN important_places_data TEXT`, (err) => {
         if (err && !err.message.includes('duplicate column name')) {
             console.error('Error adding important_places_data column:', err);
-        }
+   
+    // --- Southern Öland tourism survey tables (English/Swedish) ---
+    db.run(`CREATE TABLE IF NOT EXISTS oland_surveys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_at TEXT DEFAULT (datetime('now')),
+        language TEXT,
+        consent INTEGER,
+        age TEXT,
+        sex TEXT,
+        education TEXT,
+        residence TEXT,
+        stay_length TEXT,
+        zip_code TEXT,
+        tourism_work TEXT,
+        tourism_job_categories TEXT,
+        responses_json TEXT,
+        attraction_pins_json TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS oland_attraction_pins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        survey_id INTEGER,
+        lat REAL,
+        lng REAL,
+        category TEXT,
+        name TEXT,
+        FOREIGN KEY(survey_id) REFERENCES oland_surveys(id) ON DELETE CASCADE
+    )`);
+     }
     });
     
 
 });
+
+
+// Helpers: detect and store Southern Öland tourism survey submissions
+function isOlandPayload(data) {
+    if (!data) return false;
+    // New front-end sends { responses: {...}, attraction_pins: [...] }
+    if (data.responses || data.attraction_pins) return true;
+
+    // offline.js style may send JSON strings
+    if (typeof data.responses === 'string' || typeof data.attraction_pins === 'string') return true;
+
+    // Heuristic: fields present in Öland demographics
+    const demoKeys = ['age','sex','education','residence','stay_length','tourism_work'];
+    return demoKeys.some(k => Object.prototype.hasOwnProperty.call(data, k));
+}
+
+function safeParseJson(v, fallback) {
+    try {
+        if (v == null) return fallback;
+        if (typeof v === 'string') return JSON.parse(v);
+        return v;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function insertOlandSurvey(db, data, cb) {
+    const attractionPins = safeParseJson(data.attraction_pins, []);
+    const responses = safeParseJson(data.responses, {});
+
+    const jobCats = Array.isArray(data.tourism_job_categories)
+        ? data.tourism_job_categories
+        : safeParseJson(data.tourism_job_categories, []);
+
+    const stmt = `
+        INSERT INTO oland_surveys
+        (language, consent, age, sex, education, residence, stay_length, zip_code, tourism_work, tourism_job_categories, responses_json, attraction_pins_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    db.run(stmt, [
+        data.language || null,
+        data.consent ? 1 : 0,
+        data.age || null,
+        data.sex || null,
+        data.education || null,
+        data.residence || null,
+        data.stay_length || null,
+        data.zip_code || null,
+        data.tourism_work || null,
+        JSON.stringify(jobCats || []),
+        JSON.stringify(responses || {}),
+        JSON.stringify(attractionPins || []),
+    ], function(err) {
+        if (err) return cb(err);
+
+        const surveyId = this.lastID;
+        if (!attractionPins || attractionPins.length === 0) return cb(null, surveyId);
+
+        const pinStmt = db.prepare(`
+            INSERT INTO oland_attraction_pins (survey_id, lat, lng, category, name)
+            VALUES (?, ?, ?, ?, ?)
+        `);
+
+        for (const p of attractionPins) {
+            pinStmt.run([
+                surveyId,
+                Number(p.lat) || 0,
+                Number(p.lng) || 0,
+                p.category || null,
+                p.name || null
+            ]);
+        }
+        pinStmt.finalize((e) => cb(e, surveyId));
+    });
+}
 
 // Routes
 app.get('/', (req, res) => {
@@ -83,7 +187,14 @@ app.get('/', (req, res) => {
 });
 
 app.get('/database', (req, res) => {
-    db.all(`SELECT * FROM surveys ORDER BY id DESC`, (err, surveys) => {
+    // Fetch new Öland survey submissions
+    db.all(`SELECT * FROM oland_surveys ORDER BY id DESC`, (errO, olandSurveys) => {
+        if (errO) {
+            console.error('Error fetching oland_surveys:', errO);
+            olandSurveys = [];
+        }
+
+        db.all(`SELECT * FROM surveys ORDER BY id DESC`, (err, surveys) => {
         if (err) {
             console.error('Error fetching surveys:', err);
             return res.status(500).send('Database error: ' + err.message);
@@ -117,7 +228,41 @@ app.get('/database', (req, res) => {
             .delete-col{text-align:center;min-width:80px;max-width:80px}
             </style></head><body><div class="container">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h1>🌿 Green Spaces Survey Database</h1>
+                                <h1>🌿 Green Spaces Survey Database</h1>
+                <h2 style="margin-top:20px;color:#2c5530;">🏝️ Southern Öland Tourism Survey (English/Svenska)</h2>
+                <div class="table-container" style="max-height:420px;min-width:auto;">
+                  <table style="min-width:1400px;">
+                    <thead>
+                      <tr>
+                        <th>ID</th><th>Created</th><th>Lang</th><th>Age</th><th>Sex</th><th>Education</th>
+                        <th>Residence</th><th>Stay length</th><th>Zip</th><th>Tourism work</th><th>Job categories</th>
+                        <th>Responses JSON</th><th>Pins JSON</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${ (olandSurveys || []).map(s => `
+                        <tr>
+                          <td>${s.id}</td>
+                          <td>${s.created_at || ''}</td>
+                          <td>${s.language || ''}</td>
+                          <td>${s.age || ''}</td>
+                          <td>${s.sex || ''}</td>
+                          <td>${s.education || ''}</td>
+                          <td>${s.residence || ''}</td>
+                          <td>${s.stay_length || ''}</td>
+                          <td>${s.zip_code || ''}</td>
+                          <td>${s.tourism_work || ''}</td>
+                          <td>${s.tourism_job_categories || ''}</td>
+                          <td style="max-width:420px;white-space:pre-wrap;">${s.responses_json || ''}</td>
+                          <td style="max-width:420px;white-space:pre-wrap;">${s.attraction_pins_json || ''}</td>
+                        </tr>
+                      `).join('') }
+                    </tbody>
+                  </table>
+                </div>
+
+                <hr style="margin:30px 0;border:none;border-top:2px solid #e6e6e6;">
+
                 <a href="/" style="background: #2d8a47; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">← Back to Survey</a>
             </div>
             <div style="text-align:center;margin:20px 0">
@@ -280,6 +425,7 @@ app.get('/database', (req, res) => {
             res.send(html);
         });
     });
+    });
 });
 
 app.get('/download-csv', (req, res) => {
@@ -366,8 +512,36 @@ app.get('/download-csv', (req, res) => {
     });
 });
 
+
+// New front-end fallback endpoint (JSON)
+app.post('/submit', (req, res) => {
+    const data = req.body;
+    if (!isOlandPayload(data)) {
+        return res.status(400).json({ success: false, error: 'Unsupported payload for /submit' });
+    }
+
+    insertOlandSurvey(db, data, (err, surveyId) => {
+        if (err) {
+            console.error('Error storing Öland survey:', err);
+            return res.status(500).json({ success: false, error: err.message });
+        }
+        res.json({ success: true, survey_id: surveyId });
+    });
+});
+
 app.post('/submit-survey', (req, res) => {
     const data = req.body;
+    // If this is the Southern Öland tourism survey payload, store it in the oland_* tables.
+    if (isOlandPayload(data)) {
+        return insertOlandSurvey(db, data, (err, surveyId) => {
+            if (err) {
+                console.error('Error storing Öland survey:', err);
+                return res.status(500).json({ success: false, error: err.message });
+            }
+            return res.json({ success: true, survey_id: surveyId });
+        });
+    }
+
     console.log('Received survey data:', data);
     
     // Parse and format map data before insertion
