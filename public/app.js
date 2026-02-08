@@ -63,8 +63,8 @@ const translations = {
     map_title: "Mapping part",
     map_instructions_title: "From your perspective: the most important tourist attractions on Southern Öland",
     map_instructions_p:
-      "Pin 5 to 10 most important tourist attractions. For each pin, choose a category and write the attraction name.",
-    pin_rule: "Rule: add 5–10 pins",
+      "Pin the most important tourist attraction (1 point). For each pin, choose a category and write the attraction name.",
+    pin_rule: "Rule: add 1 point",
     pins_added: "Pins added",
     clear_pins: "Clear pins",
     map_hint:
@@ -90,7 +90,7 @@ const translations = {
 
     // Validation & messages
     err_required: "Please answer all required questions.",
-    err_pins: "Please add between 5 and 10 pins on the map.",
+    err_pins: "Please add exactly 1 point on the map.",
     err_consent: "You must consent to participate to continue.",
     success: "Survey submitted successfully. Thank you!",
     error: "Something went wrong while submitting. Please try again.",
@@ -190,8 +190,8 @@ const translations = {
     map_title: "Kartläggningsdel",
     map_instructions_title: "Ur ditt perspektiv: viktigaste turistattraktioner på södra Öland",
     map_instructions_p:
-      "Markera 5 till 10 av de viktigaste turistattraktionerna. För varje markering, välj kategori och skriv namnet på attraktionen.",
-    pin_rule: "Regel: lägg till 5–10 markeringar",
+      "Markera den viktigaste turistattraktionen (1 markering). För varje markering, välj kategori och skriv namnet på attraktionen.",
+    pin_rule: "Regel: lägg till 1 markering",
     pins_added: "Markeringar",
     clear_pins: "Rensa markeringar",
     map_hint:
@@ -217,7 +217,7 @@ const translations = {
 
     // Validation & messages
     err_required: "Vänligen besvara alla obligatoriska frågor.",
-    err_pins: "Vänligen lägg till mellan 5 och 10 markeringar på kartan.",
+    err_pins: "Vänligen lägg till exakt 1 markering på kartan.",
     err_consent: "Du måste samtycka för att kunna fortsätta.",
     success: "Enkäten har skickats. Tack!",
     error: "Något gick fel vid inskickning. Försök igen.",
@@ -594,11 +594,27 @@ function initializeMap() {
 }
 
 function addOrEditPin(pin) {
-  // Create a new pin object
-  const id = pin.id || cryptoRandomId();
-  const existing = attractionPins.find(p => p.id === id);
+  // Single-point mode:
+  // - If no pin yet: create it
+  // - If already one pin: move it to the new location and re-open editor
+  if (!map) return;
 
-  const draft = existing || {
+  // If a pin exists, reuse it
+  if (attractionPins.length === 1) {
+    const existing = attractionPins[0];
+    existing.lat = pin.lat;
+    existing.lng = pin.lng;
+    if (existing._marker) {
+      existing._marker.setLatLng([existing.lat, existing.lng]);
+      openPinPopup(existing._marker, existing.id);
+      updatePinCount();
+      return;
+    }
+  }
+
+  // Otherwise create a new pin
+  const id = cryptoRandomId();
+  const newPin = {
     id,
     lat: pin.lat,
     lng: pin.lng,
@@ -606,27 +622,15 @@ function addOrEditPin(pin) {
     name: '',
   };
 
-  const marker = L.marker([draft.lat, draft.lng]).addTo(map);
+  const marker = L.marker([newPin.lat, newPin.lng]).addTo(map);
+  marker.on('click', () => openPinPopup(marker, newPin.id));
+  newPin._marker = marker;
 
-  marker.on('click', () => {
-    openPinPopup(marker, draft.id);
-  });
-
-  // If editing existing, replace marker reference by deleting old one and keeping new
-  draft._marker = marker;
-
-  if (!existing) {
-    attractionPins.push(draft);
-  } else {
-    // update lat/lng if user clicked somewhere new (this path is not used now)
-    existing.lat = draft.lat;
-    existing.lng = draft.lng;
-    existing._marker = marker;
-  }
-
-  openPinPopup(marker, draft.id);
+  attractionPins = [newPin]; // enforce single pin
+  openPinPopup(marker, newPin.id);
   updatePinCount();
 }
+
 
 function openPinPopup(marker, pinId) {
   const pin = attractionPins.find(p => p.id === pinId);
@@ -791,13 +795,17 @@ function collectFormData() {
     if (k === 'tourism_job_categories') {
       if (!data[k]) data[k] = [];
       data[k].push(v);
+    } else if (k === 'consent') {
+      // consent checkbox returns "on" if checked; convert to boolean
+      data[k] = true;
     } else {
       data[k] = v;
     }
   }
 
-  // Consent checkbox is outside the <form> in index.html, so we read it directly.
-  data.consent = document.querySelector('input[name="consent"]')?.checked === true;
+    // Consent checkbox may be outside the <form>, so read it directly
+  const consentEl = document.querySelector('input[name="consent"]');
+  data.consent = consentEl ? !!consentEl.checked : false;
 
   data.language = currentLanguage;
 
@@ -829,12 +837,13 @@ function validateForm(data) {
     return false;
   }
 
-  // Pins: 5–10
+  // Pins: exactly 1
   const n = (data.attraction_pins || []).length;
-  if (n < 5 || n > 10) {
+  if (n !== 1) {
     showMessage(t('err_pins'), 'error');
     return false;
   }
+
 
   // Required radios: ensure no unanswered in the two likert blocks + demographics
   const formEl = document.getElementById('survey-form');
@@ -860,25 +869,8 @@ async function submitForm() {
     const data = collectFormData();
     if (!validateForm(data)) return;
 
-    // Prefer offline manager if your repo uses it
-    if (window.offlineManager && typeof window.offlineManager.submitSurvey === 'function') {
-      const result = await window.offlineManager.submitSurvey({
-        // Keep backward compatibility: offline.js might expect a flat object. We provide JSON-safe object.
-        ...data,
-        attraction_pins: JSON.stringify(data.attraction_pins),
-        responses: JSON.stringify(data.responses),
-      });
+    // Direct POST to backend
 
-      if (result && result.success) {
-        showMessage(t('success'), 'success');
-        document.getElementById('survey-form').reset();
-        clearPins();
-        return;
-      }
-      throw new Error('offlineManager submission failed');
-    }
-
-    // Fallback direct POST
     const res = await fetch('/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
