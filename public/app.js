@@ -1,12 +1,16 @@
-// app.js — Southern Öland Tourism Survey (English/Svenska)
-// - Renders Q1–Q20 (two blocks) + demographics
-// - Map: MULTIPLE pins (no auto-moving). Click = add a pin. Edit by clicking the pin.
-// - Validation: consent required; at least 1 pin
-// - Submit: POST JSON to /submit (server.js stores columns q1_1..q2_9)
+// app.js (updated for the Southern Öland tourism survey)
+// Key goals:
+//  - English + Swedish
+//  - Two Likert blocks (1–5 + "I don't know/Vet ej")
+//  - Demographics block (as per PDFs)
+//  - ONE map (pins only) with category + attraction name
+//  - Collect payload and send to backend (or offline manager if present)
+//
+// NOTE: The backend should store the payload as JSON to avoid schema changes.
 
 let currentLanguage = 'en';
 let map;
-let attractionPins = []; // {id, lat, lng, category, name, _marker}
+let attractionPins = []; // {id, lat, lng, category, name}
 
 const LIKERT_OPTIONS = [
   { value: '1', key: 'likert_1' },
@@ -28,6 +32,7 @@ const translations = {
   en: {
     title: "Tourism in Southern Öland Survey",
     main_title: "TOURISM IN SOUTHERN ÖLAND",
+
     purpose_title: "Purpose of the Study",
     purpose_p1:
       "You are invited to participate in a research study that explores how local stakeholders perceive the spatial distribution of tourism and identify key tourist attractions and types of heritage in Southern Öland.",
@@ -48,26 +53,28 @@ const translations = {
     sec1_title: "Statements about tourism on Southern Öland",
     likert_hint_1:
       "Please tell us how much you agree or disagree with the following statements (1 = Strongly disagree ... 5 = Strongly agree, I don't know).",
+
     sec2_title: "Statements about tourism and heritage of Southern Öland",
     likert_hint_2:
       "Please tell us how much you agree or disagree with the following statements (1 = Strongly disagree ... 5 = Strongly agree, I don't know).",
+
     demo_title: "Demographics",
 
     map_title: "Mapping part",
-    map_instructions_title:
-      "From your perspective: the most important tourist attractions on Southern Öland",
+    map_instructions_title: "From your perspective: the most important tourist attractions on Southern Öland",
     map_instructions_p:
-      "Pin the most important tourist attractions. For each pin, choose a category and write the attraction name.",
-    pin_rule: "Rule: add at least 1 pin",
+      "Pin the most important tourist attraction (1 point). For each pin, choose a category and write the attraction name.",
+    pin_rule: "Rule: add 1 point",
     pins_added: "Pins added",
     clear_pins: "Clear pins",
     map_hint:
-      "Tip: click the map to add a pin. Click a pin to edit its category/name or delete it.",
+      "Tip: click on the map to add a pin. Click an existing pin to edit its category/name or delete it.",
+
     thanks_title: "Thank you for participating",
-    thanks_p:
-      "Your answers will help research on tourism planning, heritage management, and sustainable development in Southern Öland.",
+    thanks_p: "Your answers will help research on tourism planning, heritage management, and sustainable development in Southern Öland.",
     submit: "Submit Survey",
 
+    // Likert labels
     likert_1: "1 — Strongly disagree",
     likert_2: "2 — Disagree",
     likert_3: "3 — Neither agree nor disagree",
@@ -75,17 +82,20 @@ const translations = {
     likert_5: "5 — Strongly agree",
     likert_dk: "I don't know",
 
+    // Categories
     cat_cultural: "Cultural heritage",
     cat_natural: "Natural heritage",
     cat_food: "Food & Beverage",
     cat_shopping: "Shopping & Local Products",
 
+    // Validation & messages
     err_required: "Please answer all required questions.",
-    err_pins: "Please add at least 1 pin on the map.",
+    err_pins: "Please add exactly 1 point on the map.",
     err_consent: "You must consent to participate to continue.",
     success: "Survey submitted successfully. Thank you!",
     error: "Something went wrong while submitting. Please try again.",
 
+    // Demographics labels
     age_label: "Age",
     sex_label: "Sex",
     edu_label: "Education",
@@ -96,6 +106,7 @@ const translations = {
     job_label: "If yes, in which job categories related to the tourism sector?",
     optional: "(optional)",
 
+    // Demographics options
     age_18_34: "18–34",
     age_35_54: "35–54",
     age_55_65: "55–65",
@@ -136,16 +147,19 @@ const translations = {
     job_other: "Other",
     job_dk: "I don’t know",
 
+    // Pin modal / prompts
     pin_title: "Attraction pin",
     pin_name: "Attraction name",
     pin_category: "Category",
     save: "Save",
     delete: "Delete pin",
+    cancel: "Cancel",
   },
 
   sv: {
     title: "Turism på södra Öland – Enkät",
     main_title: "TURISM PÅ SÖDRA ÖLAND",
+
     purpose_title: "Syftet med studien",
     purpose_p1:
       "Du är inbjuden att delta i en forskningsstudie som undersöker hur lokala aktörer uppfattar turismens rumsliga fördelning samt identifierar viktiga turistattraktioner och typer av kulturarv på södra Öland.",
@@ -166,26 +180,28 @@ const translations = {
     sec1_title: "Påståenden om turism på södra Öland",
     likert_hint_1:
       "Vänligen ange i vilken grad du instämmer eller inte instämmer (1 = Instämmer inte alls ... 5 = Instämmer helt, Vet ej).",
+
     sec2_title: "Påståenden om turism och kulturarv på södra Öland",
     likert_hint_2:
       "Vänligen ange i vilken grad du instämmer eller inte instämmer (1 = Instämmer inte alls ... 5 = Instämmer helt, Vet ej).",
+
     demo_title: "Demografi",
 
     map_title: "Kartläggningsdel",
-    map_instructions_title:
-      "Ur ditt perspektiv: viktigaste turistattraktioner på södra Öland",
+    map_instructions_title: "Ur ditt perspektiv: viktigaste turistattraktioner på södra Öland",
     map_instructions_p:
-      "Markera de viktigaste turistattraktionerna. För varje markering, välj kategori och skriv namnet på attraktionen.",
-    pin_rule: "Regel: lägg till minst 1 markering",
+      "Markera den viktigaste turistattraktionen (1 markering). För varje markering, välj kategori och skriv namnet på attraktionen.",
+    pin_rule: "Regel: lägg till 1 markering",
     pins_added: "Markeringar",
     clear_pins: "Rensa markeringar",
     map_hint:
       "Tips: klicka på kartan för att lägga till en markering. Klicka på en markering för att redigera kategori/namn eller ta bort den.",
+
     thanks_title: "Tack för att du deltog",
-    thanks_p:
-      "Dina svar bidrar till forskning om turismplanering, kulturarvsförvaltning och hållbar utveckling på södra Öland.",
+    thanks_p: "Dina svar bidrar till forskning om turismplanering, kulturarvsförvaltning och hållbar utveckling på södra Öland.",
     submit: "Skicka in",
 
+    // Likert labels
     likert_1: "1 — Instämmer inte alls",
     likert_2: "2 — Instämmer inte",
     likert_3: "3 — Varken instämmer eller instämmer inte",
@@ -193,17 +209,20 @@ const translations = {
     likert_5: "5 — Instämmer helt",
     likert_dk: "Vet ej",
 
+    // Categories
     cat_cultural: "Kulturarv",
     cat_natural: "Naturarv",
     cat_food: "Mat och dryck",
     cat_shopping: "Shopping och lokala produkter",
 
+    // Validation & messages
     err_required: "Vänligen besvara alla obligatoriska frågor.",
     err_pins: "Vänligen lägg till minst 1 markering på kartan.",
     err_consent: "Du måste samtycka för att kunna fortsätta.",
     success: "Enkäten har skickats. Tack!",
     error: "Något gick fel vid inskickning. Försök igen.",
 
+    // Demographics labels
     age_label: "Ålder",
     sex_label: "Kön",
     edu_label: "Utbildning",
@@ -214,6 +233,7 @@ const translations = {
     job_label: "Om ja, inom vilka yrkeskategorier relaterade till turistsektorn arbetar du?",
     optional: "(valfritt)",
 
+    // Demographics options
     age_18_34: "18–34",
     age_35_54: "35–54",
     age_55_65: "55–65",
@@ -254,14 +274,17 @@ const translations = {
     job_other: "Annat",
     job_dk: "Jag vet inte",
 
+    // Pin modal / prompts
     pin_title: "Markering",
     pin_name: "Attraktionens namn",
     pin_category: "Kategori",
     save: "Spara",
     delete: "Ta bort",
+    cancel: "Avbryt",
   },
 };
 
+// Likert questions (from PDFs)
 const Q1_11_EN = [
   "I support tourism and want to see it remains important to Southern Öland.",
   "The number of tourists in Southern Öland is too low in summer.",
@@ -288,6 +311,7 @@ const Q1_11_SV = [
   "Den nuvarande fördelningen av turister i södra Öland främjar en likvärdig utveckling av områdets olika delar.",
   "Turisminfrastrukturen (logi, transport, restaurangverksamhet) på södra Öland är jämnt fördelad.",
 ];
+
 const Q12_20_EN = [
   "Cultural heritage (e.g., churches, historic buildings, archaeological sites) is a major attraction for tourists in Southern Öland.",
   "Tourism on Southern Öland contributes to the preservation of local heritage.",
@@ -312,15 +336,11 @@ const Q12_20_SV = [
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
-  try {
-    currentLanguage = localStorage.getItem('language') || 'en';
-    updateLanguageButtons();
-    updateTexts();
-    renderSurvey();
-    initializeMap();
-  } catch (e) {
-    console.error('Init error', e);
-  }
+  currentLanguage = localStorage.getItem('language') || 'en';
+  updateLanguageButtons();
+  updateTexts();
+  renderSurvey();
+  initializeMap();
 });
 
 function switchLanguage(lang) {
@@ -328,11 +348,12 @@ function switchLanguage(lang) {
   localStorage.setItem('language', lang);
   updateLanguageButtons();
   updateTexts();
-  renderSurvey();
+  renderSurvey(); // re-render dynamic sections with translated items
+  // re-render map pin popups when clicked later; existing markers will still show, but popup content comes from click handler
 }
 
 function updateLanguageButtons() {
-  document.querySelectorAll('.lang button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.language-switcher button').forEach(btn => btn.classList.remove('active'));
   const btn = document.getElementById(`lang-${currentLanguage}`);
   if (btn) btn.classList.add('active');
 }
@@ -342,18 +363,26 @@ function t(key) {
 }
 
 function updateTexts() {
-  document.title = t('title');
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     el.textContent = t(key);
   });
+  document.title = t('title');
 }
 
 function renderSurvey() {
-  renderLikertSection('likert-section-1', 'q1_', currentLanguage === 'sv' ? Q1_11_SV : Q1_11_EN);
-  renderLikertSection('likert-section-2', 'q2_', currentLanguage === 'sv' ? Q12_20_SV : Q12_20_EN);
+  renderLikertSection('likert-section-1', 'q1_', getQuestionsBlock1());
+  renderLikertSection('likert-section-2', 'q2_', getQuestionsBlock2());
   renderDemographics();
   updatePinCount();
+}
+
+function getQuestionsBlock1() {
+  return currentLanguage === 'sv' ? Q1_11_SV : Q1_11_EN;
+}
+
+function getQuestionsBlock2() {
+  return currentLanguage === 'sv' ? Q12_20_SV : Q12_20_EN;
 }
 
 function renderLikertSection(containerId, namePrefix, questions) {
@@ -369,7 +398,7 @@ function renderLikertSection(containerId, namePrefix, questions) {
     qDiv.className = 'question';
 
     const title = document.createElement('p');
-    title.className = 'qtitle';
+    title.className = 'question-title';
     title.textContent = `${qNum}. ${qText}`;
     qDiv.appendChild(title);
 
@@ -401,13 +430,16 @@ function renderLikertSection(containerId, namePrefix, questions) {
 function renderDemographics() {
   const container = document.getElementById('demographics');
   if (!container) return;
+
   container.innerHTML = '';
 
-  const radioGroup = (name, titleKey, options) => {
+  // Helper to build radio groups
+  const radioGroup = (name, titleKey, options, required = true) => {
     const q = document.createElement('div');
     q.className = 'question';
+
     const p = document.createElement('p');
-    p.className = 'qtitle';
+    p.className = 'question-title';
     p.textContent = t(titleKey);
     q.appendChild(p);
 
@@ -417,7 +449,7 @@ function renderDemographics() {
       input.type = 'radio';
       input.name = name;
       input.value = opt.value;
-      input.required = true;
+      input.required = required;
 
       const span = document.createElement('span');
       span.textContent = t(opt.key);
@@ -427,15 +459,18 @@ function renderDemographics() {
       label.appendChild(span);
       q.appendChild(label);
     });
+
     return q;
   };
 
-  const checkboxGroup = (name, titleKey, options) => {
+  // Helper for checkbox group (job categories)
+  const checkboxGroup = (name, titleKey, options, required = false) => {
     const q = document.createElement('div');
     q.className = 'question';
+
     const p = document.createElement('p');
-    p.className = 'qtitle';
-    p.textContent = `${t(titleKey)} ${t('optional')}`;
+    p.className = 'question-title';
+    p.textContent = `${t(titleKey)} ${required ? '' : t('optional')}`;
     q.appendChild(p);
 
     options.forEach(opt => {
@@ -453,6 +488,7 @@ function renderDemographics() {
       label.appendChild(span);
       q.appendChild(label);
     });
+
     return q;
   };
 
@@ -505,14 +541,16 @@ function renderDemographics() {
     ])
   );
 
+  // Zip code (text)
   const zip = document.createElement('div');
   zip.className = 'question';
   const zipTitle = document.createElement('p');
-  zipTitle.className = 'qtitle';
+  zipTitle.className = 'question-title';
   zipTitle.textContent = `${t('zip_label')} ${t('optional')}`;
   const zipInput = document.createElement('input');
   zipInput.type = 'text';
   zipInput.name = 'zip_code';
+  zipInput.placeholder = '...';
   zip.appendChild(zipTitle);
   zip.appendChild(zipInput);
   container.appendChild(zip);
@@ -535,62 +573,70 @@ function renderDemographics() {
       { value: 'recreation', key: 'job_recreation' },
       { value: 'other', key: 'job_other' },
       { value: 'dont_know', key: 'job_dk' },
-    ])
+    ], false)
   );
 }
 
 function initializeMap() {
+  // Center on Southern Öland (rough). You can adjust to your preferred default.
   const defaultCenter = [56.55, 16.5];
-  map = L.map('map').setView(defaultCenter, 10);
+  const defaultZoom = 10;
+
+  map = L.map('map').setView(defaultCenter, defaultZoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
   map.on('click', (e) => {
-    addPin(e.latlng.lat, e.latlng.lng);
+    addOrEditPin({ lat: e.latlng.lat, lng: e.latlng.lng });
   });
 }
 
-function addPin(lat, lng) {
+function addOrEditPin(pin) {
+  // Multi-pin mode:
+  // - Every map click creates a new pin
+  if (!map) return;
+
   const id = cryptoRandomId();
-  const pin = {
+  const newPin = {
     id,
-    lat,
-    lng,
+    lat: pin.lat,
+    lng: pin.lng,
     category: ATTRACTION_CATEGORIES[0].value,
     name: '',
-    _marker: null,
   };
 
-  const marker = L.marker([lat, lng]).addTo(map);
-  pin._marker = marker;
+  const marker = L.marker([newPin.lat, newPin.lng]).addTo(map);
+  marker.on('click', () => openPinPopup(marker, newPin.id));
+  newPin._marker = marker;
 
-  marker.on('click', () => openPinPopup(pin));
-  attractionPins.push(pin);
+  attractionPins.push(newPin);
 
-  openPinPopup(pin);
+  openPinPopup(marker, newPin.id);
   updatePinCount();
 }
 
-function openPinPopup(pin) {
-  const marker = pin._marker;
-  if (!marker) return;
+
+
+function openPinPopup(marker, pinId) {
+  const pin = attractionPins.find(p => p.id === pinId);
+  if (!pin) return;
 
   const container = document.createElement('div');
   container.style.minWidth = '240px';
 
   const title = document.createElement('div');
-  title.style.fontWeight = '800';
+  title.style.fontWeight = '700';
   title.style.marginBottom = '8px';
   title.textContent = t('pin_title');
   container.appendChild(title);
 
+  // Name
   const nameLabel = document.createElement('label');
   nameLabel.style.display = 'block';
   nameLabel.style.marginBottom = '6px';
   nameLabel.textContent = t('pin_name');
-
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.value = pin.name || '';
@@ -599,22 +645,21 @@ function openPinPopup(pin) {
   nameInput.style.marginTop = '4px';
   nameInput.style.padding = '8px';
   nameInput.style.border = '1px solid #ddd';
-  nameInput.style.borderRadius = '8px';
-
+  nameInput.style.borderRadius = '6px';
   nameLabel.appendChild(nameInput);
   container.appendChild(nameLabel);
 
+  // Category
   const catLabel = document.createElement('label');
   catLabel.style.display = 'block';
   catLabel.style.marginBottom = '10px';
   catLabel.textContent = t('pin_category');
-
   const select = document.createElement('select');
   select.style.width = '100%';
   select.style.marginTop = '4px';
   select.style.padding = '8px';
   select.style.border = '1px solid #ddd';
-  select.style.borderRadius = '8px';
+  select.style.borderRadius = '6px';
 
   ATTRACTION_CATEGORIES.forEach(c => {
     const opt = document.createElement('option');
@@ -623,37 +668,44 @@ function openPinPopup(pin) {
     if (pin.category === c.value) opt.selected = true;
     select.appendChild(opt);
   });
-
   catLabel.appendChild(select);
   container.appendChild(catLabel);
 
+  // Buttons
   const row = document.createElement('div');
   row.style.display = 'flex';
   row.style.gap = '8px';
+  row.style.justifyContent = 'space-between';
 
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
   saveBtn.textContent = t('save');
   saveBtn.style.flex = '1';
+  saveBtn.style.cursor = 'pointer';
 
   const delBtn = document.createElement('button');
   delBtn.type = 'button';
   delBtn.textContent = t('delete');
   delBtn.style.flex = '1';
+  delBtn.style.cursor = 'pointer';
 
   row.appendChild(saveBtn);
   row.appendChild(delBtn);
+
   container.appendChild(row);
 
   saveBtn.addEventListener('click', () => {
     pin.name = (nameInput.value || '').trim();
     pin.category = select.value;
+
+    // Update marker popup summary
     marker.bindPopup(pinSummary(pin)).openPopup();
-    marker.closePopup();
+    marker.closePopup(); // close the edit popup
+    updatePinCount();
   });
 
   delBtn.addEventListener('click', () => {
-    deletePin(pin.id);
+    removePin(pin.id);
   });
 
   marker.bindPopup(container).openPopup();
@@ -666,17 +718,21 @@ function pinSummary(pin) {
   return `<div><strong>${cat}</strong><br/>${name}</div>`;
 }
 
-function deletePin(id) {
+function removePin(id) {
   const idx = attractionPins.findIndex(p => p.id === id);
   if (idx === -1) return;
-  const p = attractionPins[idx];
-  if (p._marker) map.removeLayer(p._marker);
+  const pin = attractionPins[idx];
+  if (pin._marker) {
+    map.removeLayer(pin._marker);
+  }
   attractionPins.splice(idx, 1);
   updatePinCount();
 }
 
 function clearPins() {
-  attractionPins.forEach(p => p._marker && map.removeLayer(p._marker));
+  attractionPins.forEach(p => {
+    if (p._marker) map.removeLayer(p._marker);
+  });
   attractionPins = [];
   updatePinCount();
 }
@@ -711,8 +767,8 @@ function showMessage(msg, type) {
   div.textContent = msg;
   div.className = type;
   div.style.display = 'block';
-  div.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setTimeout(() => (div.style.display = 'none'), 6000);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  setTimeout(() => (div.style.display = 'none'), 7000);
 }
 
 function collectFormData() {
@@ -720,59 +776,76 @@ function collectFormData() {
   const fd = new FormData(formEl);
   const data = {};
 
+  // Basic scalar fields (radios + text)
   for (const [k, v] of fd.entries()) {
+    // checkbox group for job categories -> array
     if (k === 'tourism_job_categories') {
       if (!data[k]) data[k] = [];
       data[k].push(v);
+    } else if (k === 'consent') {
+      // consent checkbox returns "on" if checked; convert to boolean
+      data[k] = true;
     } else {
       data[k] = v;
     }
   }
 
-  // Consent is OUTSIDE the form on purpose (UX). Read it directly.
-  data.consent = !!document.getElementById('consent')?.checked;
+    // Consent checkbox may be outside the <form>, so read it directly
+  const consentEl = document.querySelector('input[name="consent"]');
+  data.consent = consentEl ? !!consentEl.checked : false;
 
   data.language = currentLanguage;
 
-  // Collect Likert responses into flat keys (q1_1.. q2_9)
-  const responses = {};
-  const checked = formEl.querySelectorAll('input[type="radio"]:checked');
-  checked.forEach(inp => { responses[inp.name] = inp.value; });
-
-  // Flatten: server expects columns matching these keys
-  Object.assign(data, responses);
-
-  // Pins
-  data.pins = attractionPins.map(p => ({
-    id: p.id, lat: p.lat, lng: p.lng, category: p.category, name: p.name || ''
+  // Map pins - strip marker refs
+  data.attraction_pins = attractionPins.map(p => ({
+    id: p.id,
+    lat: p.lat,
+    lng: p.lng,
+    category: p.category,
+    name: p.name || '',
   }));
+
+  // Also keep raw question responses in a nested object for simpler backend storage
+  data.responses = {};
+
+  // Collect all likert radios by name prefix
+  const allInputs = formEl.querySelectorAll('input[type="radio"]:checked');
+  allInputs.forEach(inp => {
+    data.responses[inp.name] = inp.value;
+  });
 
   return data;
 }
 
 function validateForm(data) {
+  // Consent
   if (!data.consent) {
     showMessage(t('err_consent'), 'error');
     return false;
   }
 
-  // Required radios
+  // Pins: at least 1
+  const n = (data.attraction_pins || []).length;
+  if (n < 1) {
+    showMessage(t('err_pins'), 'error');
+    return false;
+  }
+
+
+  // Required radios: ensure no unanswered in the two likert blocks + demographics
   const formEl = document.getElementById('survey-form');
-  const requiredNames = Array.from(formEl.querySelectorAll('input[type="radio"][required]'))
+  const requiredRadios = Array.from(formEl.querySelectorAll('input[type="radio"][required]'))
     .map(i => i.name)
     .filter((v, i, a) => a.indexOf(v) === i);
 
-  for (const name of requiredNames) {
-    const ok = formEl.querySelector(`input[name="${CSS.escape(name)}"]:checked`);
-    if (!ok) {
+  for (const name of requiredRadios) {
+    const checked = formEl.querySelector(`input[name="${CSS.escape(name)}"]:checked`);
+    if (!checked) {
       showMessage(t('err_required'), 'error');
+      const el = formEl.querySelector(`input[name="${CSS.escape(name)}"]`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     }
-  }
-
-  if (!data.pins || data.pins.length < 1) {
-    showMessage(t('err_pins'), 'error');
-    return false;
   }
 
   return true;
@@ -783,6 +856,8 @@ async function submitForm() {
     const data = collectFormData();
     if (!validateForm(data)) return;
 
+    // Direct POST to backend
+
     const res = await fetch('/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -790,10 +865,8 @@ async function submitForm() {
     });
 
     if (!res.ok) throw new Error('HTTP ' + res.status);
-
     showMessage(t('success'), 'success');
     document.getElementById('survey-form').reset();
-    document.getElementById('consent').checked = false;
     clearPins();
   } catch (e) {
     console.error(e);
