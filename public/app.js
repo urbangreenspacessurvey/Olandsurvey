@@ -791,13 +791,13 @@ function collectFormData() {
     if (k === 'tourism_job_categories') {
       if (!data[k]) data[k] = [];
       data[k].push(v);
-    } else if (k === 'consent') {
-      // consent checkbox returns "on" if checked; convert to boolean
-      data[k] = true;
     } else {
       data[k] = v;
     }
   }
+
+  // Consent checkbox is outside the <form> in index.html, so we read it directly.
+  data.consent = document.querySelector('input[name="consent"]')?.checked === true;
 
   data.language = currentLanguage;
 
