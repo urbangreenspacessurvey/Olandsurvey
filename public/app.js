@@ -217,7 +217,7 @@ const translations = {
 
     // Validation & messages
     err_required: "Vänligen besvara alla obligatoriska frågor.",
-    err_pins: "Vänligen lägg till minst 1 markering på kartan.",
+    err_pins: "Vänligen lägg till exakt 1 markering på kartan.",
     err_consent: "Du måste samtycka för att kunna fortsätta.",
     success: "Enkäten har skickats. Tack!",
     error: "Något gick fel vid inskickning. Försök igen.",
@@ -589,15 +589,42 @@ function initializeMap() {
   }).addTo(map);
 
   map.on('click', (e) => {
-    addOrEditPin({ lat: e.latlng.lat, lng: e.latlng.lng });
+    // Avoid adding a pin when the user is clicking a marker or a popup.
+    const tgt = e?.originalEvent?.target;
+    if (tgt && (tgt.closest?.('.leaflet-marker-icon') || tgt.closest?.('.leaflet-popup') || tgt.closest?.('.leaflet-control'))) {
+      return;
+    }
+
+    // Simple debounce (some mobile browsers can fire duplicate clicks)
+    const now = Date.now();
+    if (window.__lastMapClickTs && (now - window.__lastMapClickTs) < 250) return;
+    window.__lastMapClickTs = now;
+
+    addPin(e.latlng.lat, e.latlng.lng);
+  });
   });
 }
 
 function addOrEditPin(pin) {
-  // Multi-pin mode:
-  // - Every map click creates a new pin
+  // Single-point mode:
+  // - If no pin yet: create it
+  // - If already one pin: move it to the new location and re-open editor
   if (!map) return;
 
+  // If a pin exists, reuse it
+  if (attractionPins.length === 1) {
+    const existing = attractionPins[0];
+    existing.lat = pin.lat;
+    existing.lng = pin.lng;
+    if (existing._marker) {
+      existing._marker.setLatLng([existing.lat, existing.lng]);
+      openPinPopup(existing._marker, existing.id);
+      updatePinCount();
+      return;
+    }
+  }
+
+  // Otherwise create a new pin
   const id = cryptoRandomId();
   const newPin = {
     id,
@@ -611,12 +638,10 @@ function addOrEditPin(pin) {
   marker.on('click', () => openPinPopup(marker, newPin.id));
   newPin._marker = marker;
 
-  attractionPins.push(newPin);
-
+  attractionPins = [newPin]; // enforce single pin
   openPinPopup(marker, newPin.id);
   updatePinCount();
 }
-
 
 
 function openPinPopup(marker, pinId) {
@@ -624,7 +649,9 @@ function openPinPopup(marker, pinId) {
   if (!pin) return;
 
   const container = document.createElement('div');
-  container.style.minWidth = '240px';
+  
+  try { L.DomEvent.disableClickPropagation(container); L.DomEvent.disableScrollPropagation(container); } catch {}
+container.style.minWidth = '240px';
 
   const title = document.createElement('div');
   title.style.fontWeight = '700';
@@ -805,7 +832,9 @@ function collectFormData() {
     name: p.name || '',
   }));
 
-  // Also keep raw question responses in a nested object for simpler backend storage
+  
+  data.attraction_pins = dedupePins(data.attraction_pins);
+// Also keep raw question responses in a nested object for simpler backend storage
   data.responses = {};
 
   // Collect all likert radios by name prefix
@@ -824,9 +853,9 @@ function validateForm(data) {
     return false;
   }
 
-  // Pins: at least 1
+  // Pins: exactly 1
   const n = (data.attraction_pins || []).length;
-  if (n < 1) {
+  if (n !== 1) {
     showMessage(t('err_pins'), 'error');
     return false;
   }
@@ -872,4 +901,25 @@ async function submitForm() {
     console.error(e);
     showMessage(t('error'), 'error');
   }
+}
+
+
+function dedupePins(pins) {
+  // Remove accidental duplicates at the same coordinates.
+  // If two pins share the same lat/lng, keep the one with a non-empty name.
+  const byKey = new Map();
+  for (const p of (pins || [])) {
+    const key = `${Number(p.lat).toFixed(6)},${Number(p.lng).toFixed(6)}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, p);
+      continue;
+    }
+    const existingName = (existing.name || '').trim();
+    const newName = (p.name || '').trim();
+    if (!existingName && newName) {
+      byKey.set(key, p);
+    }
+  }
+  return Array.from(byKey.values());
 }
