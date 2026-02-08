@@ -10,6 +10,7 @@
 
 let currentLanguage = 'en';
 let map;
+let mapInitialized = false;
 let attractionPins = []; // {id, lat, lng, category, name}
 
 const LIKERT_OPTIONS = [
@@ -63,8 +64,8 @@ const translations = {
     map_title: "Mapping part",
     map_instructions_title: "From your perspective: the most important tourist attractions on Southern Öland",
     map_instructions_p:
-      "Pin the most important tourist attraction (1 point). For each pin, choose a category and write the attraction name.",
-    pin_rule: "Rule: add 1 point",
+      "Pin 5 to 10 most important tourist attractions. For each pin, choose a category and write the attraction name.",
+    pin_rule: "Rule: add 1–10 pins",
     pins_added: "Pins added",
     clear_pins: "Clear pins",
     map_hint:
@@ -90,7 +91,7 @@ const translations = {
 
     // Validation & messages
     err_required: "Please answer all required questions.",
-    err_pins: "Please add exactly 1 point on the map.",
+    err_pins: "Please add between 1 and 10 pins on the map.",
     err_consent: "You must consent to participate to continue.",
     success: "Survey submitted successfully. Thank you!",
     error: "Something went wrong while submitting. Please try again.",
@@ -190,8 +191,8 @@ const translations = {
     map_title: "Kartläggningsdel",
     map_instructions_title: "Ur ditt perspektiv: viktigaste turistattraktioner på södra Öland",
     map_instructions_p:
-      "Markera den viktigaste turistattraktionen (1 markering). För varje markering, välj kategori och skriv namnet på attraktionen.",
-    pin_rule: "Regel: lägg till 1 markering",
+      "Markera 5 till 10 av de viktigaste turistattraktionerna. För varje markering, välj kategori och skriv namnet på attraktionen.",
+    pin_rule: "Regel: lägg till 1–10 markeringar",
     pins_added: "Markeringar",
     clear_pins: "Rensa markeringar",
     map_hint:
@@ -217,7 +218,7 @@ const translations = {
 
     // Validation & messages
     err_required: "Vänligen besvara alla obligatoriska frågor.",
-    err_pins: "Vänligen lägg till exakt 1 markering på kartan.",
+    err_pins: "Vänligen lägg till mellan 1 och 10 markeringar på kartan.",
     err_consent: "Du måste samtycka för att kunna fortsätta.",
     success: "Enkäten har skickats. Tack!",
     error: "Något gick fel vid inskickning. Försök igen.",
@@ -578,6 +579,8 @@ function renderDemographics() {
 }
 
 function initializeMap() {
+  if (mapInitialized) return;
+  mapInitialized = true;
   // Center on Southern Öland (rough). You can adjust to your preferred default.
   const defaultCenter = [56.55, 16.5];
   const defaultZoom = 10;
@@ -594,45 +597,28 @@ function initializeMap() {
 }
 
 function addOrEditPin(pin) {
-  // Single-point mode:
-  // - If no pin yet: create it
-  // - If already one pin: move it to the new location and re-open editor
-  if (!map) return;
-
-  // If a pin exists, reuse it
-  if (attractionPins.length === 1) {
-    const existing = attractionPins[0];
-    existing.lat = pin.lat;
-    existing.lng = pin.lng;
-    if (existing._marker) {
-      existing._marker.setLatLng([existing.lat, existing.lng]);
-      openPinPopup(existing._marker, existing.id);
-      updatePinCount();
-      return;
-    }
-  }
-
-  // Otherwise create a new pin
-  const id = cryptoRandomId();
-  const newPin = {
-    id,
+  // Always add a new pin at the clicked location
+  const draft = {
+    id: cryptoRandomId(),
     lat: pin.lat,
     lng: pin.lng,
     category: ATTRACTION_CATEGORIES[0].value,
     name: '',
   };
 
-  const marker = L.marker([newPin.lat, newPin.lng]).addTo(map);
-  marker.on('click', () => openPinPopup(marker, newPin.id));
-  newPin._marker = marker;
+  const marker = L.marker([draft.lat, draft.lng]).addTo(map);
+  draft._marker = marker;
 
-  attractionPins = [newPin]; // enforce single pin
-  openPinPopup(marker, newPin.id);
+  marker.on('click', () => {
+    openPinPopup(marker, draft.id);
+  });
+
+  attractionPins.push(draft);
+  openPinPopup(marker, draft.id);
   updatePinCount();
 }
 
-
-function openPinPopup(marker, pinId) {
+function openPinPopupfunction openPinPopup(marker, pinId) {
   const pin = attractionPins.find(p => p.id === pinId);
   if (!pin) return;
 
@@ -803,10 +789,6 @@ function collectFormData() {
     }
   }
 
-    // Consent checkbox may be outside the <form>, so read it directly
-  const consentEl = document.querySelector('input[name="consent"]');
-  data.consent = consentEl ? !!consentEl.checked : false;
-
   data.language = currentLanguage;
 
   // Map pins - strip marker refs
@@ -837,13 +819,12 @@ function validateForm(data) {
     return false;
   }
 
-  // Pins: exactly 1
+  // Pins: 1–10
   const n = (data.attraction_pins || []).length;
-  if (n !== 1) {
+  if (n < 1 || n > 10) {
     showMessage(t('err_pins'), 'error');
     return false;
   }
-
 
   // Required radios: ensure no unanswered in the two likert blocks + demographics
   const formEl = document.getElementById('survey-form');
@@ -869,8 +850,6 @@ async function submitForm() {
     const data = collectFormData();
     if (!validateForm(data)) return;
 
-    // Direct POST to backend
-
     const res = await fetch('/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -878,6 +857,7 @@ async function submitForm() {
     });
 
     if (!res.ok) throw new Error('HTTP ' + res.status);
+
     showMessage(t('success'), 'success');
     document.getElementById('survey-form').reset();
     clearPins();
