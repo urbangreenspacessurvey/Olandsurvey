@@ -317,11 +317,11 @@ const Q12_20_EN = [
   "Tourism on Southern Öland contributes to the preservation of local heritage.",
   "Tourism in Southern Öland creates pressures on local heritage.",
   "The UNESCO World Heritage designation makes Southern Öland more attractive for tourists.",
-  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction.",
-  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are major tourists' attractions in Southern Öland.",
+  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction for Southern Öland.",
+  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are main tourists' attractions in Southern Öland.",
   "Outdoor recreation activities (e.g., cycling, hiking, horse riding) are main tourist attractions in Southern Öland.",
   "Food and beverage experiences (restaurants, cafés, markets) are main tourist attractions in Southern Öland.",
-  "Festivals and cultural events are main attractions for tourists in Southern Öland.",
+  "Festivals and cultural events are main tourists attractions in Southern Öland.",
 ];
 const Q12_20_SV = [
   "Kulturarvet (t.ex. kyrkor, historiska byggnader och arkeologiska platser) är en viktig attraktion för turister i södra Öland.",
@@ -329,10 +329,10 @@ const Q12_20_SV = [
   "Turismen i södra Öland skapar påfrestningar på det lokala kulturarvet.",
   "UNESCO-världsarvsstatusen gör södra Öland mer attraktivt för turister.",
   "UNESCO-världsarvet Södra Ölands odlingslandskap är ett betydande turistmål.",
-  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är viktiga attraktioner för turister i södra Öland.",
-  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de mest betydelsefulla turistattraktionerna på södra Öland.",
-  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de mest betydelsefulla turistattraktionerna på södra Öland.",
-  "Festivaler och kulturevenemang är de mest betydelsefulla turistattraktionerna på södra Öland.",
+  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är de främsta turistattraktionerna på södra Öland.",
+  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de främsta turistattraktionerna på södra Öland.",
+  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de främsta turistattraktionerna på södra Öland.",
+  "Festivaler och kulturevenemang är de främsta turistattraktionerna på södra Öland.",
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -699,7 +699,7 @@ function openPinPopup(marker, pinId) {
     pin.category = select.value;
 
     // Update marker popup summary
-    marker.bindPopup(pinSummary(pin)).openPopup();
+    marker.bindTooltip(pinSummaryText(pin), { direction: 'top', sticky: true, opacity: 0.9 });
     marker.closePopup(); // close the edit popup
     updatePinCount();
   });
@@ -718,6 +718,13 @@ function pinSummary(pin) {
   return `<div><strong>${cat}</strong><br/>${name}</div>`;
 }
 
+
+function pinSummaryText(pin) {
+  const catKey = ATTRACTION_CATEGORIES.find(c => c.value === pin.category)?.key || '';
+  const cat = catKey ? t(catKey) : pin.category;
+  const name = pin.name ? pin.name : '(no name)';
+  return `${cat} — ${name}`;
+}
 function removePin(id) {
   const idx = attractionPins.findIndex(p => p.id === id);
   if (idx === -1) return;
