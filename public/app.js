@@ -766,12 +766,13 @@ function clearPins() {
   });
   attractionPins = [];
   updatePinCount();
-function removeLastPin() {
-  if (!attractionPins.length) return;
-  const last = attractionPins[attractionPins.length - 1];
-  if (last && last.id) removePinById(last.id);
 }
 
+// Remove the most recently added pin (works across Safari/Chrome without relying on marker clicks)
+function removeLastPin() {
+  if (!attractionPins || attractionPins.length === 0) return;
+  const last = attractionPins[attractionPins.length - 1];
+  if (last && last.id) removePin(last.id);
 }
 
 function updatePinCount() {
@@ -806,6 +807,56 @@ function showMessage(msg, type) {
   div.style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setTimeout(() => (div.style.display = 'none'), 7000);
+}
+
+function isMobileViewport() {
+  return window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+}
+
+function ensureMobileToast() {
+  let toast = document.getElementById('mobile-toast');
+  if (toast) return toast;
+  toast = document.createElement('div');
+  toast.id = 'mobile-toast';
+  toast.setAttribute('role', 'alert');
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Close');
+  close.textContent = '×';
+  close.addEventListener('click', () => toast.classList.remove('show'));
+  const text = document.createElement('span');
+  text.id = 'mobile-toast-text';
+  toast.appendChild(close);
+  toast.appendChild(text);
+  document.body.appendChild(toast);
+  return toast;
+}
+
+function showMobileToast(msg) {
+  if (!isMobileViewport()) return;
+  const toast = ensureMobileToast();
+  const text = document.getElementById('mobile-toast-text');
+  if (text) text.textContent = msg;
+  toast.classList.add('show');
+}
+
+function scrollToQuestionElement(el) {
+  if (!el) return;
+  // Prefer scrolling the question container (looks nicer)
+  const target = el.closest && el.closest('.question') ? el.closest('.question') : el;
+  const rect = target.getBoundingClientRect();
+  const top = window.pageYOffset + rect.top - 90;
+  // iOS Safari sometimes ignores smooth scroll on first try; set both scrollTops
+  document.documentElement.scrollTop = top;
+  document.body.scrollTop = top;
+  window.scrollTo({ top, behavior: 'smooth' });
+  // Focus an input inside to help Safari show native hints
+  const focusEl = target.querySelector && target.querySelector('input, select, textarea');
+  if (focusEl) {
+    setTimeout(() => {
+      try { focusEl.focus({ preventScroll: true }); } catch (_) { try { focusEl.focus(); } catch (__){ } }
+    }, 250);
+  }
 }
 
 function collectFormData() {
@@ -879,21 +930,15 @@ function validateForm(data) {
     const checked = formEl.querySelector(`input[name="${CSS.escape(name)}"]:checked`);
     if (!checked) {
       showMessage(t('err_required'), 'error');
+      // On mobile, Safari can fail to scroll to radios; show a sticky message too
+      showMobileToast(t('err_required'));
       const el = formEl.querySelector(`input[name="${CSS.escape(name)}"]`);
       if (el) {
-        // Mobile Safari sometimes fails to scroll/show the validation hint for radio groups.
-        // Use a slightly stronger, mobile-only scroll + focus strategy.
-        const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
-        const target = el.closest('.question') || el.closest('.question-block') || el.closest('fieldset') || el.parentElement || el;
-        // Ensure any open map popups don't steal focus on iOS
-        try { if (map && map.closePopup) map.closePopup(); } catch {}
-        requestAnimationFrame(() => {
-          target.scrollIntoView({ behavior: 'smooth', block: isMobile ? 'start' : 'center' });
-          // Nudge upward so the question header is visible under sticky UI
-          if (isMobile) setTimeout(() => window.scrollBy(0, -120), 350);
-          // Focus to trigger native "please select" hints where supported
-          try { el.focus({ preventScroll: true }); } catch { try { el.focus(); } catch {} }
-        });
+        scrollToQuestionElement(el);
+        // Extra fallback: if the user is already at the bottom, nudge upwards
+        if (isMobileViewport()) {
+          setTimeout(() => window.scrollTo({ top: Math.max(0, window.pageYOffset - 50), behavior: 'smooth' }), 350);
+        }
       }
       return false;
     }

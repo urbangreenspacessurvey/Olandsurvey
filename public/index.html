@@ -57,10 +57,18 @@
     .hint{font-size:14px;color:#666;margin-top:6px;}
     .pill{display:inline-block;padding:3px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;font-size:12px;color:#444;}
     .pin-counter{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;}
-    .pin-actions{display:flex;gap:10px;align-items:center;justify-content:flex-end;}
     .pin-counter strong{color:#2c5530;}
+    .pin-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;}
     .mini-btn{background:#fff;border:2px solid #2d8a47;border-radius:999px;padding:8px 14px;cursor:pointer;font-weight:700;}
     .mini-btn:hover{background:#2d8a47;color:#fff;}
+
+    /* Mobile helper toast for validation */
+    #mobile-toast{display:none;position:fixed;left:12px;right:12px;bottom:12px;z-index:2000;background:#fff5f5;border:2px solid #f5c6cb;color:#721c24;
+      padding:10px 12px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.12);font-weight:700;}
+    #mobile-toast button{float:right;background:transparent;border:none;font-size:18px;line-height:1;cursor:pointer;color:#721c24;}
+    @media (max-width: 768px){
+      #mobile-toast.show{display:block;}
+    }
   </style>
 </head>
 <body>
@@ -121,9 +129,9 @@
             <span class="pill"><span data-i18n="pins_added">Pins added</span>: <strong id="pin-count">0</strong></span>
           </div>
           <div class="pin-actions">
-          <button type="button" class="mini-btn" onclick="clearPins()" data-i18n="clear_pins">Clear pins</button>
-          <button type="button" class="mini-btn" onclick="removeLastPin()" data-i18n="remove_last_pin">Remove last pin</button>
-        </div>
+            <button type="button" class="mini-btn" onclick="clearPins()" data-i18n="clear_pins">Clear pins</button>
+            <button type="button" class="mini-btn" onclick="removeLastPin()" data-i18n="remove_last_pin">Remove last pin</button>
+          </div>
         </div>
         <div class="map-container"><div id="map" class="map"></div></div>
         <p class="hint" data-i18n="map_hint"></p>
@@ -145,5 +153,10 @@
   <!-- Keep your offline/PWA scripts if you already use them in the repo -->
   <script src="offline.js"></script>
   <script src="app.js"></script>
+
+  <div id="mobile-toast" role="status" aria-live="polite">
+    <button type="button" onclick="hideMobileToast()" aria-label="Close">×</button>
+    <span id="mobile-toast-text"></span>
+  </div>
 </body>
 </html>
