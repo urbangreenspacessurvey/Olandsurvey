@@ -67,6 +67,7 @@ const translations = {
     pin_rule: "Rule: add 1 point",
     pins_added: "Pins added",
     clear_pins: "Clear pins",
+    remove_last_pin: "Remove last pin",
     map_hint:
       "Tip: click on the map to add a pin. Click an existing pin to edit its category/name or delete it.",
 
@@ -749,6 +750,16 @@ function removePin(id) {
     map.removeLayer(pin._marker);
   }
   attractionPins.splice(idx, 1);
+  updatePinCount();
+}
+
+function removeLastPin() {
+  if (!attractionPins.length) return;
+  const pin = attractionPins[attractionPins.length - 1];
+  if (pin && pin._marker) {
+    map.removeLayer(pin._marker);
+  }
+  attractionPins.pop();
   updatePinCount();
 }
 
