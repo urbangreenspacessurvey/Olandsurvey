@@ -630,7 +630,38 @@ function addOrEditPin(pin) {
   };
 
   const marker = L.marker([newPin.lat, newPin.lng]).addTo(map);
-  marker.on('click', () => openPinPopup(marker, newPin.id));
+
+  // Safari/iOS can be flaky with marker "click" (touch -> click translation).
+  // Use a small, non-invasive multi-event + DOM touchend listener to reliably open the editor popup.
+  const openEditor = (e) => {
+    try {
+      if (e && e.originalEvent) {
+        // Prevent the underlying map from interpreting the same gesture.
+        if (typeof e.originalEvent.preventDefault === 'function') e.originalEvent.preventDefault();
+        if (typeof e.originalEvent.stopPropagation === 'function') e.originalEvent.stopPropagation();
+      }
+    } catch (_) {}
+    openPinPopup(marker, newPin.id);
+  };
+
+  marker.on('click', openEditor);
+  marker.on('touchend', openEditor); // Leaflet may emit on some touch setups
+
+  marker.on('add', () => {
+    const el = marker.getElement && marker.getElement();
+    if (!el) return;
+
+    // Ensure touches open the popup even when "click" doesn't fire.
+    el.addEventListener(
+      'touchend',
+      (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openPinPopup(marker, newPin.id);
+      },
+      { passive: false }
+    );
+  });
   // Quick delete without needing the popup to be open:
   // right-click (desktop) / long-press (some mobile browsers) to delete.
   marker.on('contextmenu', () => {
@@ -749,7 +780,11 @@ function openPinPopup(marker, pinId) {
     removePin(pin.id);
   });
 
-  marker.bindPopup(container).openPopup();
+  marker.bindPopup(container);
+  // Open on next tick to improve reliability on iOS Safari.
+  setTimeout(() => {
+    try { marker.openPopup(); } catch (_) {}
+  }, 0);
 }
 
 function pinSummary(pin) {
