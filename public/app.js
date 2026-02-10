@@ -153,6 +153,8 @@ const translations = {
     pin_category: "Category",
     save: "Save",
     delete: "Delete pin",
+    confirm_delete_pin: "Delete this pin?",
+    no_name: "(no name)",
     cancel: "Cancel",
   },
 
@@ -280,6 +282,8 @@ const translations = {
     pin_category: "Kategori",
     save: "Spara",
     delete: "Ta bort",
+    confirm_delete_pin: "Ta bort den här markeringen?",
+    no_name: "(inget namn)",
     cancel: "Avbryt",
   },
 };
@@ -317,11 +321,11 @@ const Q12_20_EN = [
   "Tourism on Southern Öland contributes to the preservation of local heritage.",
   "Tourism in Southern Öland creates pressures on local heritage.",
   "The UNESCO World Heritage designation makes Southern Öland more attractive for tourists.",
-  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction for Southern Öland.",
-  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are main tourists' attractions in Southern Öland.",
+  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction.",
+  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are major tourists' attractions in Southern Öland.",
   "Outdoor recreation activities (e.g., cycling, hiking, horse riding) are main tourist attractions in Southern Öland.",
   "Food and beverage experiences (restaurants, cafés, markets) are main tourist attractions in Southern Öland.",
-  "Festivals and cultural events are main tourists attractions in Southern Öland.",
+  "Festivals and cultural events are main attractions for tourists in Southern Öland.",
 ];
 const Q12_20_SV = [
   "Kulturarvet (t.ex. kyrkor, historiska byggnader och arkeologiska platser) är en viktig attraktion för turister i södra Öland.",
@@ -329,10 +333,10 @@ const Q12_20_SV = [
   "Turismen i södra Öland skapar påfrestningar på det lokala kulturarvet.",
   "UNESCO-världsarvsstatusen gör södra Öland mer attraktivt för turister.",
   "UNESCO-världsarvet Södra Ölands odlingslandskap är ett betydande turistmål.",
-  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är de främsta turistattraktionerna på södra Öland.",
-  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de främsta turistattraktionerna på södra Öland.",
-  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de främsta turistattraktionerna på södra Öland.",
-  "Festivaler och kulturevenemang är de främsta turistattraktionerna på södra Öland.",
+  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är viktiga attraktioner för turister i södra Öland.",
+  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de mest betydelsefulla turistattraktionerna på södra Öland.",
+  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de mest betydelsefulla turistattraktionerna på södra Öland.",
+  "Festivaler och kulturevenemang är de mest betydelsefulla turistattraktionerna på södra Öland.",
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -609,6 +613,13 @@ function addOrEditPin(pin) {
 
   const marker = L.marker([newPin.lat, newPin.lng]).addTo(map);
   marker.on('click', () => openPinPopup(marker, newPin.id));
+  // Quick delete without needing the popup to be open:
+  // right-click (desktop) / long-press (some mobile browsers) to delete.
+  marker.on('contextmenu', () => {
+    if (confirm(t('confirm_delete_pin'))) {
+      removePin(newPin.id);
+    }
+  });
   newPin._marker = marker;
 
   attractionPins.push(newPin);
@@ -698,8 +709,16 @@ function openPinPopup(marker, pinId) {
     pin.name = (nameInput.value || '').trim();
     pin.category = select.value;
 
-    // Update marker popup summary
-    marker.bindTooltip(pinSummaryText(pin), { direction: 'top', sticky: true, opacity: 0.9 });
+    // Keep the edit popup available on marker click.
+    // Show a lightweight summary on hover instead of overwriting the popup content.
+    marker.unbindTooltip();
+    marker.bindTooltip(pinSummary(pin), {
+      direction: 'top',
+      offset: [0, -8],
+      opacity: 0.95,
+      sticky: false
+    });
+
     marker.closePopup(); // close the edit popup
     updatePinCount();
   });
@@ -714,17 +733,10 @@ function openPinPopup(marker, pinId) {
 function pinSummary(pin) {
   const catKey = ATTRACTION_CATEGORIES.find(c => c.value === pin.category)?.key || '';
   const cat = catKey ? t(catKey) : pin.category;
-  const name = pin.name ? escapeHtml(pin.name) : '<em>(no name)</em>';
-  return `<div><strong>${cat}</strong><br/>${name}</div>`;
-}
-
-
-function pinSummaryText(pin) {
-  const catKey = ATTRACTION_CATEGORIES.find(c => c.value === pin.category)?.key || '';
-  const cat = catKey ? t(catKey) : pin.category;
-  const name = pin.name ? pin.name : '(no name)';
+  const name = pin.name ? String(pin.name) : t('no_name');
   return `${cat} — ${name}`;
 }
+
 function removePin(id) {
   const idx = attractionPins.findIndex(p => p.id === id);
   if (idx === -1) return;
