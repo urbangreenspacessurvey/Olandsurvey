@@ -67,8 +67,9 @@ const translations = {
     pin_rule: "Rule: add 1 point",
     pins_added: "Pins added",
     clear_pins: "Clear pins",
+    remove_last_pin: "Remove last pin",
     map_hint:
-      "Tip: click on the map to add a pin. Click an existing pin to edit its category/name or delete it.",
+      "Tip: click on the map to add a pin. Use the buttons to remove pins.",
 
     thanks_title: "Thank you for participating",
     thanks_p: "Your answers will help research on tourism planning, heritage management, and sustainable development in Southern Öland.",
@@ -194,8 +195,9 @@ const translations = {
     pin_rule: "Regel: lägg till 1 markering",
     pins_added: "Markeringar",
     clear_pins: "Rensa markeringar",
+    remove_last_pin: "Ta bort senaste pin",
     map_hint:
-      "Tips: klicka på kartan för att lägga till en markering. Klicka på en markering för att redigera kategori/namn eller ta bort den.",
+      "Tips: klicka på kartan för att lägga till en markering. Använd knapparna för att ta bort markeringar.",
 
     thanks_title: "Tack för att du deltog",
     thanks_p: "Dina svar bidrar till forskning om turismplanering, kulturarvsförvaltning och hållbar utveckling på södra Öland.",
@@ -872,7 +874,31 @@ function validateForm(data) {
     if (!checked) {
       showMessage(t('err_required'), 'error');
       const el = formEl.querySelector(`input[name="${CSS.escape(name)}"]`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (el) {
+        // Desktop browsers usually show the radio group fine with scrollIntoView.
+        // On mobile Safari, smooth scrolling + fixed headers can leave the first unanswered question off-screen.
+        const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+        try {
+          el.scrollIntoView({ behavior: isMobile ? 'auto' : 'smooth', block: 'center' });
+        } catch (_) {
+          el.scrollIntoView();
+        }
+
+        if (isMobile) {
+          // Nudge a bit upward so the question title is visible.
+          setTimeout(() => {
+            const rect = el.getBoundingClientRect();
+            const top = rect.top + window.pageYOffset - 140;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+          }, 50);
+
+          // Trigger the native "Please select one" UX when available.
+          setTimeout(() => {
+            try { el.focus({ preventScroll: true }); } catch (_) { try { el.focus(); } catch (_) {} }
+            try { if (typeof el.reportValidity === 'function') el.reportValidity(); } catch (_) {}
+          }, 120);
+        }
+      }
       return false;
     }
   }
