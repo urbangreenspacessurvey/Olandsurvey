@@ -11,11 +11,6 @@
 let currentLanguage = 'en';
 let map;
 let attractionPins = []; // {id, lat, lng, category, name}
-// Safari can fire both touch and click for the same tap on Leaflet maps.
-// To avoid double-added pins, debounce map clicks by time + coordinates.
-let lastMapClickTs = 0;
-let lastMapClickLat = null;
-let lastMapClickLng = null;
 
 const LIKERT_OPTIONS = [
   { value: '1', key: 'likert_1' },
@@ -72,7 +67,6 @@ const translations = {
     pin_rule: "Rule: add 1 point",
     pins_added: "Pins added",
     clear_pins: "Clear pins",
-    remove_last_pin: "Remove last pin",
     map_hint:
       "Tip: click on the map to add a pin. Click an existing pin to edit its category/name or delete it.",
 
@@ -159,8 +153,6 @@ const translations = {
     pin_category: "Category",
     save: "Save",
     delete: "Delete pin",
-    confirm_delete_pin: "Delete this pin?",
-    no_name: "(no name)",
     cancel: "Cancel",
   },
 
@@ -288,8 +280,6 @@ const translations = {
     pin_category: "Kategori",
     save: "Spara",
     delete: "Ta bort",
-    confirm_delete_pin: "Ta bort den här markeringen?",
-    no_name: "(inget namn)",
     cancel: "Avbryt",
   },
 };
@@ -327,22 +317,22 @@ const Q12_20_EN = [
   "Tourism on Southern Öland contributes to the preservation of local heritage.",
   "Tourism in Southern Öland creates pressures on local heritage.",
   "The UNESCO World Heritage designation makes Southern Öland more attractive for tourists.",
-  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction for Southern Öland.",
-  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are main tourists' attractions in Southern Öland.",
+  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction.",
+  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are major tourists' attractions in Southern Öland.",
   "Outdoor recreation activities (e.g., cycling, hiking, horse riding) are main tourist attractions in Southern Öland.",
   "Food and beverage experiences (restaurants, cafés, markets) are main tourist attractions in Southern Öland.",
-  "Festivals and cultural events are main tourists attractions in Southern Öland.",
+  "Festivals and cultural events are main attractions for tourists in Southern Öland.",
 ];
 const Q12_20_SV = [
   "Kulturarvet (t.ex. kyrkor, historiska byggnader och arkeologiska platser) är en viktig attraktion för turister i södra Öland.",
   "Turismen i södra Öland bidrar till bevarandet av det lokala kulturarvet.",
   "Turismen i södra Öland skapar påfrestningar på det lokala kulturarvet.",
   "UNESCO-världsarvsstatusen gör södra Öland mer attraktivt för turister.",
-  "UNESCO-världsarvet Södra Ölands odlingslandskap är ett betydande turistmål för södra Öland.",
-  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är de främsta turistattraktionerna på södra Öland.",
-  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de främsta turistattraktionerna på södra Öland.",
-  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de främsta turistattraktionerna på södra Öland.",
-  "Festivaler och kulturevenemang är de främsta turistattraktionerna på södra Öland.",
+  "UNESCO-världsarvet Södra Ölands odlingslandskap är ett betydande turistmål.",
+  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är viktiga attraktioner för turister i södra Öland.",
+  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de mest betydelsefulla turistattraktionerna på södra Öland.",
+  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de mest betydelsefulla turistattraktionerna på södra Öland.",
+  "Festivaler och kulturevenemang är de mest betydelsefulla turistattraktionerna på södra Öland.",
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -592,26 +582,28 @@ function initializeMap() {
   const defaultCenter = [56.55, 16.5];
   const defaultZoom = 10;
 
-  map = L.map('map', { attributionControl: true }).setView(defaultCenter, defaultZoom);
-  // Clean up the default 'Leaflet' prefix in the attribution (footnote)
-  if (map.attributionControl) map.attributionControl.setPrefix('');
+  map = L.map('map', { tap: false }).setView(defaultCenter, defaultZoom);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  map.on('click', (e) => {
+  // Safari/iOS can fire multiple events for one tap; guard against duplicate pins
+  let _lastMapClick = { t: 0, lat: null, lng: null };
+  function _shouldIgnoreMapClick(latlng) {
     const now = Date.now();
-    const lat = e.latlng.lat;
-    const lng = e.latlng.lng;
-    const sameSpot = (lastMapClickLat !== null && lastMapClickLng !== null && Math.abs(lat - lastMapClickLat) < 1e-9 && Math.abs(lng - lastMapClickLng) < 1e-9);
-    if (sameSpot && (now - lastMapClickTs) < 600) {
-      return; // ignore duplicate tap/click
+    if (_lastMapClick.lat != null && (now - _lastMapClick.t) < 450) {
+      const dLat = Math.abs(latlng.lat - _lastMapClick.lat);
+      const dLng = Math.abs(latlng.lng - _lastMapClick.lng);
+      if (dLat < 1e-6 && dLng < 1e-6) return true;
     }
-    lastMapClickTs = now;
-    lastMapClickLat = lat;
-    lastMapClickLng = lng;
-    addOrEditPin({ lat, lng });
+    _lastMapClick = { t: now, lat: latlng.lat, lng: latlng.lng };
+    return false;
+  }
+
+  map.on('click', (e) => {
+    if (_shouldIgnoreMapClick(e.latlng)) return;
+    addOrEditPin({ lat: e.latlng.lat, lng: e.latlng.lng });
   });
 }
 
@@ -630,44 +622,22 @@ function addOrEditPin(pin) {
   };
 
   const marker = L.marker([newPin.lat, newPin.lng]).addTo(map);
-
-  // Safari/iOS can be flaky with marker "click" (touch -> click translation).
-  // Use a small, non-invasive multi-event + DOM touchend listener to reliably open the editor popup.
-  const openEditor = (e) => {
-    try {
-      if (e && e.originalEvent) {
-        // Prevent the underlying map from interpreting the same gesture.
-        if (typeof e.originalEvent.preventDefault === 'function') e.originalEvent.preventDefault();
-        if (typeof e.originalEvent.stopPropagation === 'function') e.originalEvent.stopPropagation();
-      }
-    } catch (_) {}
-    openPinPopup(marker, newPin.id);
-  };
-
+  const openEditor = () => openPinPopup(marker, newPin.id);
+  // Click works well on most browsers; Safari/iOS can be flaky, so add touch/pointer fallbacks
   marker.on('click', openEditor);
-  marker.on('touchend', openEditor); // Leaflet may emit on some touch setups
-
+  marker.on('keypress', openEditor);
   marker.on('add', () => {
     const el = marker.getElement && marker.getElement();
     if (!el) return;
-
-    // Ensure touches open the popup even when "click" doesn't fire.
-    el.addEventListener(
-      'touchend',
-      (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        openPinPopup(marker, newPin.id);
-      },
-      { passive: false }
-    );
-  });
-  // Quick delete without needing the popup to be open:
-  // right-click (desktop) / long-press (some mobile browsers) to delete.
-  marker.on('contextmenu', () => {
-    if (confirm(t('confirm_delete_pin'))) {
-      removePin(newPin.id);
-    }
+    el.style.touchAction = 'manipulation';
+    const domHandler = (ev) => {
+      try { ev.preventDefault(); } catch (_) {}
+      try { ev.stopPropagation(); } catch (_) {}
+      // Defer to next tick to avoid conflicts with Leaflet internal handlers on iOS
+      setTimeout(openEditor, 0);
+    };
+    el.addEventListener('touchend', domHandler, { passive: false });
+    el.addEventListener('pointerup', domHandler, { passive: false });
   });
   newPin._marker = marker;
 
@@ -758,21 +728,8 @@ function openPinPopup(marker, pinId) {
     pin.name = (nameInput.value || '').trim();
     pin.category = select.value;
 
-    // Keep the edit popup available on marker click.
-    // Avoid Leaflet tooltips here because on touch devices they can swallow taps
-    // and prevent reopening the edit popup (and thus deleting).
-    const summary = pinSummary(pin);
-    const el = marker.getElement && marker.getElement();
-    if (el) {
-      el.title = summary;
-    } else {
-      marker.once('add', () => {
-        const el2 = marker.getElement && marker.getElement();
-        if (el2) el2.title = summary;
-      });
-    }
-
-    marker.closePopup(); // close the edit popup
+    // Close the edit popup after saving (keeps editing accessible on next click)
+    marker.closePopup();
     updatePinCount();
   });
 
@@ -780,18 +737,14 @@ function openPinPopup(marker, pinId) {
     removePin(pin.id);
   });
 
-  marker.bindPopup(container);
-  // Open on next tick to improve reliability on iOS Safari.
-  setTimeout(() => {
-    try { marker.openPopup(); } catch (_) {}
-  }, 0);
+  marker.bindPopup(container).openPopup();
 }
 
 function pinSummary(pin) {
   const catKey = ATTRACTION_CATEGORIES.find(c => c.value === pin.category)?.key || '';
   const cat = catKey ? t(catKey) : pin.category;
-  const name = pin.name ? String(pin.name) : t('no_name');
-  return `${cat} — ${name}`;
+  const name = pin.name ? escapeHtml(pin.name) : '<em>(no name)</em>';
+  return `<div><strong>${cat}</strong><br/>${name}</div>`;
 }
 
 function removePin(id) {
@@ -802,16 +755,6 @@ function removePin(id) {
     map.removeLayer(pin._marker);
   }
   attractionPins.splice(idx, 1);
-  updatePinCount();
-}
-
-function removeLastPin() {
-  if (!attractionPins.length) return;
-  const pin = attractionPins[attractionPins.length - 1];
-  if (pin && pin._marker) {
-    map.removeLayer(pin._marker);
-  }
-  attractionPins.pop();
   updatePinCount();
 }
 
