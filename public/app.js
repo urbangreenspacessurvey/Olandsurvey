@@ -11,6 +11,11 @@
 let currentLanguage = 'en';
 let map;
 let attractionPins = []; // {id, lat, lng, category, name}
+// Safari can fire both touch and click for the same tap on Leaflet maps.
+// To avoid double-added pins, debounce map clicks by time + coordinates.
+let lastMapClickTs = 0;
+let lastMapClickLat = null;
+let lastMapClickLng = null;
 
 const LIKERT_OPTIONS = [
   { value: '1', key: 'likert_1' },
@@ -587,14 +592,26 @@ function initializeMap() {
   const defaultCenter = [56.55, 16.5];
   const defaultZoom = 10;
 
-  map = L.map('map').setView(defaultCenter, defaultZoom);
+  map = L.map('map', { attributionControl: true }).setView(defaultCenter, defaultZoom);
+  // Clean up the default 'Leaflet' prefix in the attribution (footnote)
+  if (map.attributionControl) map.attributionControl.setPrefix('');
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
   map.on('click', (e) => {
-    addOrEditPin({ lat: e.latlng.lat, lng: e.latlng.lng });
+    const now = Date.now();
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+    const sameSpot = (lastMapClickLat !== null && lastMapClickLng !== null && Math.abs(lat - lastMapClickLat) < 1e-9 && Math.abs(lng - lastMapClickLng) < 1e-9);
+    if (sameSpot && (now - lastMapClickTs) < 600) {
+      return; // ignore duplicate tap/click
+    }
+    lastMapClickTs = now;
+    lastMapClickLat = lat;
+    lastMapClickLng = lng;
+    addOrEditPin({ lat, lng });
   });
 }
 
