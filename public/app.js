@@ -766,6 +766,12 @@ function clearPins() {
   });
   attractionPins = [];
   updatePinCount();
+function removeLastPin() {
+  if (!attractionPins.length) return;
+  const last = attractionPins[attractionPins.length - 1];
+  if (last && last.id) removePinById(last.id);
+}
+
 }
 
 function updatePinCount() {
@@ -875,29 +881,19 @@ function validateForm(data) {
       showMessage(t('err_required'), 'error');
       const el = formEl.querySelector(`input[name="${CSS.escape(name)}"]`);
       if (el) {
-        // Desktop browsers usually show the radio group fine with scrollIntoView.
-        // On mobile Safari, smooth scrolling + fixed headers can leave the first unanswered question off-screen.
+        // Mobile Safari sometimes fails to scroll/show the validation hint for radio groups.
+        // Use a slightly stronger, mobile-only scroll + focus strategy.
         const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
-        try {
-          el.scrollIntoView({ behavior: isMobile ? 'auto' : 'smooth', block: 'center' });
-        } catch (_) {
-          el.scrollIntoView();
-        }
-
-        if (isMobile) {
-          // Nudge a bit upward so the question title is visible.
-          setTimeout(() => {
-            const rect = el.getBoundingClientRect();
-            const top = rect.top + window.pageYOffset - 140;
-            window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-          }, 50);
-
-          // Trigger the native "Please select one" UX when available.
-          setTimeout(() => {
-            try { el.focus({ preventScroll: true }); } catch (_) { try { el.focus(); } catch (_) {} }
-            try { if (typeof el.reportValidity === 'function') el.reportValidity(); } catch (_) {}
-          }, 120);
-        }
+        const target = el.closest('.question') || el.closest('.question-block') || el.closest('fieldset') || el.parentElement || el;
+        // Ensure any open map popups don't steal focus on iOS
+        try { if (map && map.closePopup) map.closePopup(); } catch {}
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ behavior: 'smooth', block: isMobile ? 'start' : 'center' });
+          // Nudge upward so the question header is visible under sticky UI
+          if (isMobile) setTimeout(() => window.scrollBy(0, -120), 350);
+          // Focus to trigger native "please select" hints where supported
+          try { el.focus({ preventScroll: true }); } catch { try { el.focus(); } catch {} }
+        });
       }
       return false;
     }
