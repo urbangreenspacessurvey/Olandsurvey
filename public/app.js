@@ -61,9 +61,8 @@ const translations = {
     demo_title: "Demographics",
 
     map_title: "Mapping part",
-    map_instructions_title: "From your perspective: the most important tourist attractions on Southern Öland",
-    map_instructions_p:
-      "Pin the most important tourist attraction (1 point). For each pin, choose a category and write the attraction name.",
+    map_instructions_title: "From your perspective, what are the most important tourist attractions on Southern Öland?",
+    map_instructions_p: "Pin 5 to 10 of the most important tourist attractions from your perspective. For every pin added on the map, choose the attraction type from the available options and write the attraction name.",
     pin_rule: "Rule: add 1 point",
     pins_added: "Pins added",
     clear_pins: "Clear pins",
@@ -189,9 +188,8 @@ const translations = {
     demo_title: "Demografi",
 
     map_title: "Kartläggningsdel",
-    map_instructions_title: "Ur ditt perspektiv: viktigaste turistattraktioner på södra Öland",
-    map_instructions_p:
-      "Markera den viktigaste turistattraktionen (1 markering). För varje markering, välj kategori och skriv namnet på attraktionen.",
+    map_instructions_title: "Ur ditt perspektiv, vilka är de viktigaste turistattraktionerna på södra Öland?",
+    map_instructions_p: "Markera 5 till 10 av de viktigaste turistattraktionerna ur ditt perspektiv. För varje markering du lägger till på kartan, välj bland de tillgängliga alternativen vilken typ av turistattraktion det är och skriv namnet på attraktionen.",
     pin_rule: "Regel: lägg till 1 markering",
     pins_added: "Markeringar",
     clear_pins: "Rensa markeringar",
@@ -319,22 +317,22 @@ const Q12_20_EN = [
   "Tourism on Southern Öland contributes to the preservation of local heritage.",
   "Tourism in Southern Öland creates pressures on local heritage.",
   "The UNESCO World Heritage designation makes Southern Öland more attractive for tourists.",
-  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction.",
-  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are major tourists' attractions in Southern Öland.",
+  "The UNESCO World Heritage: Agricultural Landscape of Southern Öland is a major tourist attraction for Southern Öland.",
+  "Natural areas (e.g., Stora Alvaret, beaches, nature reserves) are main tourist attractions in Southern Öland.",
   "Outdoor recreation activities (e.g., cycling, hiking, horse riding) are main tourist attractions in Southern Öland.",
   "Food and beverage experiences (restaurants, cafés, markets) are main tourist attractions in Southern Öland.",
-  "Festivals and cultural events are main attractions for tourists in Southern Öland.",
+  "Festivals and cultural events are main tourist attractions in Southern Öland."
 ];
 const Q12_20_SV = [
   "Kulturarvet (t.ex. kyrkor, historiska byggnader och arkeologiska platser) är en viktig attraktion för turister i södra Öland.",
   "Turismen i södra Öland bidrar till bevarandet av det lokala kulturarvet.",
   "Turismen i södra Öland skapar påfrestningar på det lokala kulturarvet.",
   "UNESCO-världsarvsstatusen gör södra Öland mer attraktivt för turister.",
-  "UNESCO-världsarvet Södra Ölands odlingslandskap är ett betydande turistmål.",
-  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är viktiga attraktioner för turister i södra Öland.",
-  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de mest betydelsefulla turistattraktionerna på södra Öland.",
-  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de mest betydelsefulla turistattraktionerna på södra Öland.",
-  "Festivaler och kulturevenemang är de mest betydelsefulla turistattraktionerna på södra Öland.",
+  "UNESCO-världsarvet Södra Ölands odlingslandskap är ett betydande turistmål för södra Öland.",
+  "Naturmiljöer (t.ex. Stora Alvaret, stränder och naturreservat) är de främsta turistattraktionerna på södra Öland.",
+  "Friluftsaktiviteter (t.ex. cykling, vandring, ridning) är de främsta turistattraktionerna på södra Öland.",
+  "Mat- och dryckesupplevelser (restauranger, caféer, marknader) är de främsta turistattraktionerna på södra Öland.",
+  "Festivaler och kulturevenemang är de främsta turistattraktionerna på södra Öland."
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
